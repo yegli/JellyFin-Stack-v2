@@ -1,0 +1,5 @@
+.env
+config/
+data/
+CREDENTIALS.md
+backup/

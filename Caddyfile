@@ -1,0 +1,39 @@
+# Reverse proxy for the stack: one port, hostnames instead of port numbers.
+#
+# HTTP only by default, on purpose. On a LAN this is the fast, zero-friction
+# path: no certificates, no warnings, nothing to renew. See README for the two
+# ways to add real TLS if you want it.
+#
+# The direct ports (8096, 5055, ...) stay published, so this proxy is purely
+# additive. If it is ever in the way, use the port and bypass it entirely.
+{
+	admin off
+	auto_https off
+}
+
+# Bare domain goes to Jellyfin - it is the thing people actually open.
+http://{$PROXY_DOMAIN}, http://jellyfin.{$PROXY_DOMAIN} {
+	reverse_proxy jellyfin:8096
+}
+
+http://requests.{$PROXY_DOMAIN}, http://seerr.{$PROXY_DOMAIN} {
+	reverse_proxy seerr:5055
+}
+
+http://sonarr.{$PROXY_DOMAIN} {
+	reverse_proxy sonarr:8989
+}
+
+http://radarr.{$PROXY_DOMAIN} {
+	reverse_proxy radarr:7878
+}
+
+http://prowlarr.{$PROXY_DOMAIN} {
+	reverse_proxy prowlarr:9696
+}
+
+# qBittorrent validates the Host header against its own listening port and
+# answers 401 on a mismatch, so the upstream port must be the published one.
+http://qbit.{$PROXY_DOMAIN} {
+	reverse_proxy {$QBITTORRENT_HOST:qbittorrent}:{$QBITTORRENT_PORT}
+}

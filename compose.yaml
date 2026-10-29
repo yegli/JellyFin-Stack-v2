@@ -1,0 +1,133 @@
+# Jellyfin media stack for a Linux host (Intel NUC).
+#
+# Path layout matters: qBittorrent, Sonarr and Radarr all see the SAME tree at
+# /data, so imports are hardlinked instead of copied. Splitting downloads and
+# media into two separate bind mounts silently doubles disk use.
+#
+#   ${DATA_ROOT}/torrents/{movies,tv}   <- qBittorrent writes here
+#   ${DATA_ROOT}/media/{movies,tv}      <- Sonarr/Radarr hardlink here, Jellyfin reads
+#
+# Hardware transcoding lives in compose.hwaccel.yaml, which the Makefile layers
+# on when /dev/dri exists. Everything else is configured by provision.py.
+
+name: jellyfin-stack
+
+x-arr-env: &arr-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+  # Empty = accept any hostname (and Sonarr/Radarr warn about it). See .env.
+  SONARR__SERVER__ALLOWEDHOSTS: ${ARR_ALLOWED_HOSTS}
+  RADARR__SERVER__ALLOWEDHOSTS: ${ARR_ALLOWED_HOSTS}
+  PROWLARR__SERVER__ALLOWEDHOSTS: ${ARR_ALLOWED_HOSTS}
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:${JELLYFIN_TAG}
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
+    ports:
+      - "${JELLYFIN_PORT}:8096"
+      # LAN client auto-discovery. Clients only look on 7359, so changing the
+      # host side breaks "find my server" - only do it to dodge a port clash.
+      - "${JELLYFIN_DISCOVERY_PORT:-7359}:7359/udp"
+    environment:
+      TZ: ${TZ}
+      JELLYFIN_PublishedServerUrl: ${JELLYFIN_PUBLISHED_URL}
+    volumes:
+      # Named volumes, not bind mounts: Jellyfin's SQLite DB is sensitive to
+      # bind-mount filesystems (virtiofs on Docker Desktop corrupts it). Media
+      # stays a bind mount - plain files, and you want host access to them.
+      - jellyfin-config:/config
+      - jellyfin-cache:/cache
+      - ${DATA_ROOT}/media:/media:ro
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:${QBITTORRENT_TAG}
+    restart: unless-stopped
+    ports:
+      # Published and internal port MUST match. qBittorrent 5.x validates the
+      # Host header's port against its own listening port and answers 401 before
+      # it ever checks credentials, so "18080:8080" locks you out for good.
+      - "${QBITTORRENT_PORT}:${QBITTORRENT_PORT}"
+      - "${BT_PORT}:${BT_PORT}"
+      - "${BT_PORT}:${BT_PORT}/udp"
+    environment:
+      <<: *arr-env
+      WEBUI_PORT: "${QBITTORRENT_PORT}"
+      TORRENTING_PORT: "${BT_PORT}"
+    volumes:
+      - ./config/qbittorrent:/config
+      - ${DATA_ROOT}:/data
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:${PROWLARR_TAG}
+    restart: unless-stopped
+    ports:
+      - "${PROWLARR_PORT}:9696"
+    environment:
+      <<: *arr-env
+      PROWLARR__AUTH__APIKEY: ${PROWLARR_API_KEY}
+      PROWLARR__AUTH__METHOD: ${ARR_AUTH_METHOD}
+      PROWLARR__AUTH__REQUIRED: ${ARR_AUTH_REQUIRED}
+    volumes:
+      - ./config/prowlarr:/config
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:${SONARR_TAG}
+    restart: unless-stopped
+    ports:
+      - "${SONARR_PORT}:8989"
+    environment:
+      <<: *arr-env
+      SONARR__AUTH__APIKEY: ${SONARR_API_KEY}
+      SONARR__AUTH__METHOD: ${ARR_AUTH_METHOD}
+      SONARR__AUTH__REQUIRED: ${ARR_AUTH_REQUIRED}
+    volumes:
+      - ./config/sonarr:/config
+      - ${DATA_ROOT}:/data
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:${RADARR_TAG}
+    restart: unless-stopped
+    ports:
+      - "${RADARR_PORT}:7878"
+    environment:
+      <<: *arr-env
+      RADARR__AUTH__APIKEY: ${RADARR_API_KEY}
+      RADARR__AUTH__METHOD: ${ARR_AUTH_METHOD}
+      RADARR__AUTH__REQUIRED: ${ARR_AUTH_REQUIRED}
+    volumes:
+      - ./config/radarr:/config
+      - ${DATA_ROOT}:/data
+
+  # Cloudflare solver. 1337x, EZTV, Uindex and ExtraTorrent sit behind Cloudflare
+  # and return ZERO results without it - they import fine and then find nothing,
+  # which is a miserable thing to debug. No ports published: only Prowlarr talks
+  # to it, at http://flaresolverr:8191/. provision.py registers it and tags the
+  # indexers whose definition declares it needs one.
+  flaresolverr:
+    image: flaresolverr/flaresolverr:${FLARESOLVERR_TAG}
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: warning
+
+  # Seerr: the maintained successor to Jellyseerr, which was discontinued
+  # 2026-02-14. This is the request frontend the household actually uses.
+  seerr:
+    image: seerr/seerr:${SEERR_TAG}
+    restart: unless-stopped
+    ports:
+      - "${SEERR_PORT}:5055"
+    environment:
+      TZ: ${TZ}
+      LOG_LEVEL: info
+      API_KEY: ${SEERR_API_KEY}
+    volumes:
+      - ./config/seerr:/app/config
+    depends_on: [jellyfin, radarr, sonarr]
+
+volumes:
+  jellyfin-config:
+  jellyfin-cache:

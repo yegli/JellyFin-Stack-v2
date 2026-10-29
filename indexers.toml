@@ -1,0 +1,130 @@
+# Indexers as config. `make provision` applies every [[indexer]] below to
+# Prowlarr over its API, so a wiped stack comes back with the same sources and
+# you never re-add them by hand. Prowlarr then syncs them into Sonarr and Radarr
+# itself, so this file is the only place indexers are configured.
+#
+#   definition = the name exactly as Prowlarr -> Indexers -> Add Indexer lists
+#                it (655 are bundled). A typo is reported, not silently ignored.
+#   name       = what it is called in Prowlarr (defaults to `definition`)
+#   priority   = 1..50, LOWER WINS when two indexers have the same release
+#   force      = true skips Prowlarr's add-time connection test. Not normally
+#                needed: a failed test is retried with force automatically and
+#                logged, so a temporarily-down tracker still gets added.
+#   [indexer.settings] = that definition's own fields, e.g. `baseUrl` to pin a
+#                mirror. `${VAR}` is read from the environment, so private
+#                tracker credentials stay out of this file.
+#
+# Adding an entry and re-running is additive and idempotent. Removing an entry
+# does NOT delete it from Prowlarr - delete it in the UI too, so a hand-added
+# indexer is never silently destroyed.
+#
+# ===========================================================================
+# USE A VPN. Public trackers publish your IP to every peer in the swarm. Set
+# VPN_ENABLED=true in .env to route qBittorrent through Gluetun with a
+# killswitch; see README. Prowlarr only searches, qBittorrent is what connects
+# to peers, so the VPN goes around qBittorrent.
+#
+# Cloudflare: 1337x, EZTV, Uindex and ExtraTorrent are behind it and return
+# ZERO results without FlareSolverr. It is part of the stack and provisioning
+# tags those indexers for it automatically - nothing for you to do.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# English movies and series. Ordered so the specialists win over the generalists.
+# ---------------------------------------------------------------------------
+
+# TV only, well-named single episodes and season packs. Best first stop for series.
+[[indexer]]
+definition = "EZTV"
+priority = 10
+
+# Movies only. Small, consistent 1080p encodes - the "smaller file sizes" pick.
+# Only one release per quality, so it never wins on quality, just on size.
+[[indexer]]
+definition = "YTS"
+priority = 15
+
+# Big general tracker, movies and TV, widest catalogue of the public ones.
+[[indexer]]
+definition = "1337x"
+priority = 20
+
+[[indexer]]
+definition = "The Pirate Bay"
+priority = 25
+
+[[indexer]]
+definition = "LimeTorrents"
+priority = 30
+
+[[indexer]]
+definition = "Torrent Downloads"
+priority = 35
+
+# Meta-search across many public trackers. Broad but duplicate-heavy, so it is
+# last: Prowlarr prefers the lower-priority sources when they have the release.
+[[indexer]]
+definition = "Knaben"
+priority = 40
+
+# ---------------------------------------------------------------------------
+# Anime. Uncomment if you want it; Sonarr handles anime numbering on its own.
+# ---------------------------------------------------------------------------
+
+# [[indexer]]
+# definition = "Nyaa.si"
+# priority = 20
+
+# [[indexer]]
+# definition = "SubsPlease"
+# priority = 15        # current-season releases, very fast
+
+# [[indexer]]
+# definition = "Tokyo Toshokan"
+# priority = 30
+
+# ---------------------------------------------------------------------------
+# More public options, all verified present in Prowlarr. Add if the above comes
+# up short; each one is also one more site that can go down or get blocked.
+# ---------------------------------------------------------------------------
+
+# [[indexer]]
+# definition = "ExtraTorrent.st"     # needs FlareSolverr (handled for you)
+# priority = 35
+
+# [[indexer]]
+# definition = "Uindex"              # needs FlareSolverr (handled for you)
+# priority = 40
+
+# [[indexer]]
+# definition = "TorrentDownload"     # different site to "Torrent Downloads"
+# priority = 40
+
+# [[indexer]]
+# definition = "kickasstorrents.to"
+# priority = 45
+
+# Public-domain and freely-licensed material only. No VPN needed for this one.
+# [[indexer]]
+# definition = "Internet Archive"
+# priority = 50
+
+# ---------------------------------------------------------------------------
+# Pinning a mirror, when a tracker's main domain is blocked by your ISP.
+# `baseUrl` options come from the definition; Prowlarr -> the indexer's edit
+# dialog lists them.
+#
+# [[indexer]]
+# definition = "1337x"
+# priority = 20
+# [indexer.settings]
+# baseUrl = "https://1337x.st/"
+#
+# A private tracker, credentials from the environment
+# (export TRACKER_KEY=... in your shell or ~/.zshrc):
+#
+# [[indexer]]
+# definition = "SomePrivateTracker"
+# priority = 5                       # private trackers deserve to win
+# [indexer.settings]
+# apikey = "${TRACKER_KEY}"

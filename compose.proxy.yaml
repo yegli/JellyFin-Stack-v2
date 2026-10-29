@@ -1,0 +1,24 @@
+# Caddy reverse proxy, layered on by the Makefile when PROXY_ENABLED=true.
+#
+# Why Caddy: the whole config is the Caddyfile next to this file, no label
+# sprawl across every service. Proxying a video stream is a byte copy, so the
+# throughput cost is noise - Caddy saturates gigabit on a NUC without trying.
+services:
+  caddy:
+    image: caddy:${CADDY_TAG}
+    restart: unless-stopped
+    ports:
+      - "${PROXY_HTTP_PORT}:80"
+    environment:
+      PROXY_DOMAIN: ${PROXY_DOMAIN}
+      QBITTORRENT_PORT: ${QBITTORRENT_PORT}
+      QBITTORRENT_HOST: ${QBITTORRENT_HOST:-qbittorrent}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [jellyfin, seerr]
+
+volumes:
+  caddy-data:
+  caddy-config:

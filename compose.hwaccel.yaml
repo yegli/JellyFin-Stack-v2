@@ -1,0 +1,17 @@
+# Intel Quick Sync passthrough. The Makefile layers this file on automatically
+# when /dev/dri exists, so the same repo works on a GPU-less laptop.
+#
+# Two things are needed and neither is optional:
+#   - the render device itself (/dev/dri)
+#   - the container user in the host's `render` group, or every VAAPI call gets
+#     EACCES. Do NOT chmod the device instead: permissions reset on reboot.
+# provision.py then flips Jellyfin's own encoding settings to QSV over the API.
+services:
+  jellyfin:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID}"
+    environment:
+      # iHD = Gen8 (Broadwell) and newer. Haswell and older want i965.
+      LIBVA_DRIVER_NAME: ${LIBVA_DRIVER_NAME:-iHD}
